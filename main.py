@@ -1,28 +1,36 @@
+import curses
 import chess
 import chess.engine
-from vars import BG, PIECES
+
+PIECES = {
+    'Q': str("󰡚"),    'q': str("󰡚"),
+    'K': str("󰡗"),    'k': str("󰡗"),
+    'N': str("󰡘"),    'n': str("󰡘"),
+    'B': str("󰡜"),    'b': str("󰡜"),
+    'R': str("󰡛"),    'r': str("󰡛"),
+    'P': str("󰡙"),    'p': str("󰡙"),
+    'none': str(" "),
+}
+
+global selected_cell
+selected_cell = (0, 0)
 
 engine = chess.engine.SimpleEngine.popen_uci(r"./Stockfish/src/stockfish")
 chessboard = chess.Board()
 
-board: list[list[str]] = [[PIECES['none'] for _ in range(8)] for _ in range(8)]
+board: list[list[str]] = [['none' for _ in range(8)] for _ in range(8)]
 
 
-screen_cleared = False
-
-
-def print_board_white():
-    global screen_cleared
-    if (not screen_cleared):
-        print("\033[2J")
-        screen_cleared = True
-    print("\033[H")
+def print_board_white(stdscr):
     for i in range(8):
         for j in range(8):
-            print(BG['white' if (i+j) % 2 == 0 else 'black'], end='')
-            print(f" {board[i][j]} ", end='')
-            print(BG['reset'], end='')
-        print("")
+            stdscr.addstr(i, j*3, f" {PIECES[board[i][j]]} ",
+                          curses.color_pair(1 +
+                                            board[i][j].islower()*2 +
+                                            (i+j) % 2 +
+                                            4*((i, j) == selected_cell)))
+
+    stdscr.refresh()
 
 
 def parse(m):
@@ -37,14 +45,13 @@ def parse(m):
 def move(m):
     y0, x0, y1, x1, *p = parse(m)
 
-    if abs(y0 - y1) > 1 and (
-            board[x0][y0] == PIECES['K'] or
-            board[x0][y0] == PIECES['k']):
-        board[x0][y0+1], board[x1][y1+1] = board[x0][y1+1], PIECES['none']
+    if abs(y0 - y1) > 1 and (board[x0][y0] in ('K', 'k')):
+        board[x0][y0+1], board[x1][y1+1] = board[x0][y1+1], 'none'
 
     # todo:handle en-passant
+    # todo:handle promotion
 
-    board[x0][y0], board[x1][y1] = PIECES['none'], board[x0][y0]
+    board[x0][y0], board[x1][y1] = 'none', board[x0][y0]
 
 
 def set_board_from_fen(fen):
@@ -55,11 +62,11 @@ def set_board_from_fen(fen):
             x += 1
             y = 0
         elif f in 'rnbqkpRNBQKP':
-            board[x][y] = PIECES[f]
+            board[x][y] = f
             y += 1
         elif f.isdigit():
             for i in range(int(f)):
-                board[x][y] = PIECES['none']
+                board[x][y] = 'none'
                 y += 1
     # todo: use the last part of the fen
 
@@ -74,28 +81,92 @@ def bot_move():
     move(result.move.uci())
 
 
-def user_move():
+def user_move_text(stdscr):
+    curses.echo()
+    curses.curs_set(1)
     while (1):
-        uci = input("\033[Kmove: ")
+        curses.color_pair(8)
+        uci = stdscr.getstr(8, 0).decode("utf-8")
         mov = chess.Move.from_uci(uci)
         if (mov in chessboard.legal_moves):
             break
         print("Invalid move")
     chessboard.push(mov)
     move(uci)
+    curses.curs_set(0)
+    curses.noecho()
 
 
-def main():
+def get_select_cell(stdscr):
+    global selected_cell
+    x, y = selected_cell
+    while (1):
+        stdscr.keypad(True)
+        ch = stdscr.getch()
+        if (ch in (curses.KEY_LEFT, ord("h"))):
+            if y > 0:
+                y -= 1
+        elif (ch in (curses.KEY_RIGHT, ord("l"))):
+            if y < 7:
+                y += 1
+        elif (ch in (curses.KEY_DOWN, ord("j"))):
+            if x < 7:
+                x += 1
+        elif (ch in (curses.KEY_UP, ord("k"))):
+            if x > 0:
+                x -= 1
+        elif (ch in (curses.KEY_ENTER, 10, ord("\t"))):
+            break
+        else:
+            continue
+        selected_cell = x, y
+        print_board_white(stdscr)
+    return selected_cell
+
+
+def user_move_raw(stdscr):
+    x0, y0 = get_select_cell(stdscr)
+    x1, y1 = get_select_cell(stdscr)
+    uci = chr(y0+ord("a")) +\
+        chr(x0+ord("1")) +\
+        chr(y1+ord("a")) +\
+        chr(x1+ord("1"))
+
+    if x0 == x1 and y0 == y1:
+        return user_move_raw(stdscr)
+
+    mov = chess.Move.from_uci(uci)
+    if (mov not in chessboard.legal_moves):
+        return user_move_raw(stdscr)
+
+    chessboard.push(mov)
+    move(uci)
+
+
+def main(stdscr):
+    curses.mousemask(curses.ALL_MOUSE_EVENTS)
+    curses.curs_set(0)
+    curses.start_color()
+    curses.init_pair(1, curses.COLOR_BLACK, curses.COLOR_BLUE)
+    curses.init_pair(2, curses.COLOR_BLACK, curses.COLOR_WHITE)
+    curses.init_pair(3, curses.COLOR_RED, curses.COLOR_BLUE)
+    curses.init_pair(4, curses.COLOR_RED, curses.COLOR_WHITE)
+    curses.init_pair(5, curses.COLOR_BLACK, curses.COLOR_GREEN)
+    curses.init_pair(6, curses.COLOR_BLACK, curses.COLOR_GREEN)
+    curses.init_pair(7, curses.COLOR_RED, curses.COLOR_GREEN)
+    curses.init_pair(8, curses.COLOR_RED, curses.COLOR_GREEN)
+    curses.init_pair(9, curses.COLOR_WHITE, curses.COLOR_BLACK)
+
     set_starting_position()
-    print_board_white()
+    print_board_white(stdscr)
     while not chessboard.is_game_over():
-        user_move()
-        print_board_white()
         bot_move()
-        print_board_white()
+        print_board_white(stdscr)
+        user_move_raw(stdscr)
+        print_board_white(stdscr)
 
     engine.quit()
 
 
 if __name__ == '__main__':
-    main()
+    curses.wrapper(main)
