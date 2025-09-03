@@ -5,3 +5,4 @@ lib64
 makefile
 Stockfish
 pyvenv.cfg
+__pycache__

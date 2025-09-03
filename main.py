@@ -1,142 +1,101 @@
-import sys
-import termios
-import tty
+import chess
+import chess.engine
+from vars import BG, PIECES
 
-FG = dict({
-    'white': '\033[31m',
-    'black': '\033[30m',
-    'reset': '\033[0m'
-})
+engine = chess.engine.SimpleEngine.popen_uci(r"./Stockfish/src/stockfish")
+chessboard = chess.Board()
 
-BG = dict({
-    'black': '\033[47m',
-    'white': '\033[44m',
-    'reset': '\033[0m'
-})
+board: list[list[str]] = [[PIECES['none'] for _ in range(8)] for _ in range(8)]
 
 
-class Pos():
-    x: int
-    y: int
-
-    def __init__(self, x=-1, y=-1):
-        self.x = x
-        self.y = y
-
-    def get(self):
-        return self.x, self.y
-
-    def getx(self):
-        return self.x
-
-    def gety(self):
-        return self.y
-
-
-class Piece():
-    pos: Pos
-    name: str
-    show: str
-    col: int
-
-    def __init__(self, name='none', pos=Pos(), show=' ', col='white'):
-        self.name = name
-        self.show = show
-        self.col = col
-        if self.name != 'none':
-            self.pos = pos
-            board[pos.x][pos.y] = self
-        pass
-
-    def can_move(self, new_pos: Pos):
-        pass
-
-    def move(self, pos: Pos):
-        pass
-
-    def __repr__(self):
-        return "".join([FG[self.col], " ", self.show, " "])
-
-
-board: list[list[Piece]] = [[Piece() for _ in range(8)] for _ in range(8)]
-
-
-def set_starting_position():
-    Piece("King", Pos(0, 0), "󰡛", "white")
-    Piece("King", Pos(0, 1), "󰡘", "white")
-    Piece("King", Pos(0, 2), "󰡜", "white")
-    Piece("King", Pos(0, 3), "󰡚", "white")
-    Piece("King", Pos(0, 4), "󰡗", "white")
-    Piece("King", Pos(0, 5), "󰡜", "white")
-    Piece("King", Pos(0, 6), "󰡘", "white")
-    Piece("King", Pos(0, 7), "󰡛", "white")
-    Piece("King", Pos(1, 0), "󰡙", "white")
-    Piece("King", Pos(1, 1), "󰡙", "white")
-    Piece("King", Pos(1, 2), "󰡙", "white")
-    Piece("King", Pos(1, 3), "󰡙", "white")
-    Piece("King", Pos(1, 4), "󰡙", "white")
-    Piece("King", Pos(1, 5), "󰡙", "white")
-    Piece("King", Pos(1, 6), "󰡙", "white")
-    Piece("King", Pos(1, 7), "󰡙", "white")
-
-    Piece("King", Pos(7, 0), "󰡛", "black")
-    Piece("King", Pos(7, 1), "󰡘", "black")
-    Piece("King", Pos(7, 2), "󰡜", "black")
-    Piece("King", Pos(7, 3), "󰡚", "black")
-    Piece("King", Pos(7, 4), "󰡗", "black")
-    Piece("King", Pos(7, 5), "󰡜", "black")
-    Piece("King", Pos(7, 6), "󰡘", "black")
-    Piece("King", Pos(7, 7), "󰡛", "black")
-    Piece("King", Pos(6, 0), "󰡙", "black")
-    Piece("King", Pos(6, 1), "󰡙", "black")
-    Piece("King", Pos(6, 2), "󰡙", "black")
-    Piece("King", Pos(6, 3), "󰡙", "black")
-    Piece("King", Pos(6, 4), "󰡙", "black")
-    Piece("King", Pos(6, 5), "󰡙", "black")
-    Piece("King", Pos(6, 6), "󰡙", "black")
-    Piece("King", Pos(6, 7), "󰡙", "black")
+screen_cleared = False
 
 
 def print_board_white():
-    print('\033[H\033[2J', end='')
-    bg = 'black'
-    for i, line in enumerate(reversed(board)):
-        print("\n\r", f"{8-i} ", end='')
-        bg = 'white' if bg == 'black' else 'black'
-        for p in line:
-            bg = 'white' if bg == 'black' else 'black'
-            print(BG[bg], p, sep='', end='')
-    print(BG['reset'], "\r")
-    for a in " ABCDEFG":
-        print(f" {a} ", end='')
-    print("")
+    global screen_cleared
+    if (not screen_cleared):
+        print("\033[2J")
+        screen_cleared = True
+    print("\033[H")
+    for i in range(8):
+        for j in range(8):
+            print(BG['white' if (i+j) % 2 == 0 else 'black'], end='')
+            print(f" {board[i][j]} ", end='')
+            print(BG['reset'], end='')
+        print("")
+
+
+def parse(m):
+    x0, y0, x1, y1, *p = m
+    return ord(x0) - ord("a"), \
+        ord(y0) - ord("1"), \
+        ord(x1) - ord("a"), \
+        ord(y1) - ord("1")
+
+
+# all the moves should be valid
+def move(m):
+    y0, x0, y1, x1, *p = parse(m)
+
+    if abs(y0 - y1) > 1 and (
+            board[x0][y0] == PIECES['K'] or
+            board[x0][y0] == PIECES['k']):
+        board[x0][y0+1], board[x1][y1+1] = board[x0][y1+1], PIECES['none']
+
+    # todo:handle en-passant
+
+    board[x0][y0], board[x1][y1] = PIECES['none'], board[x0][y0]
+
+
+def set_board_from_fen(fen):
+    x: int = 0
+    y: int = 0
+    for f in fen:
+        if f == '/':
+            x += 1
+            y = 0
+        elif f in 'rnbqkpRNBQKP':
+            board[x][y] = PIECES[f]
+            y += 1
+        elif f.isdigit():
+            for i in range(int(f)):
+                board[x][y] = PIECES['none']
+                y += 1
+    # todo: use the last part of the fen
+
+
+def set_starting_position():
+    set_board_from_fen(chess.STARTING_BOARD_FEN)
+
+
+def bot_move():
+    result = engine.play(chessboard, chess.engine.Limit(time=1))
+    chessboard.push(result.move)
+    move(result.move.uci())
+
+
+def user_move():
+    while (1):
+        uci = input("\033[Kmove: ")
+        mov = chess.Move.from_uci(uci)
+        if (mov in chessboard.legal_moves):
+            break
+        print("Invalid move")
+    chessboard.push(mov)
+    move(uci)
 
 
 def main():
-    print("Chess TUI by Hugo Coto (github.com/hugoocoto/chess)")
-    print("Pulsa teclas (ESC para salir):")
-
-    fd = sys.stdin.fileno()
-    old_settings = termios.tcgetattr(fd)
-
     set_starting_position()
-    try:
-        tty.setraw(fd)  # raw mode
-        while True:
-            print_board_white()
-            ch = sys.stdin.read(1)
-            if ch == '\x1b':  # ESC
-                print("\nSaliendo...")
-                break
-            elif ch.isprintable():
-                print(f"alphanumeric key '{ch}' pressed")
-            else:
-                print(f"special key {repr(ch)} pressed")
-    finally:
-        termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+    print_board_white()
+    while not chessboard.is_game_over():
+        user_move()
+        print_board_white()
+        bot_move()
+        print_board_white()
+
+    engine.quit()
 
 
-if __name__ == "__main__":
-    main()
-    main()
+if __name__ == '__main__':
     main()

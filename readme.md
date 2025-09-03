@@ -4,4 +4,4 @@
 Chess for the terminal! 
 
 ## Development status
-Not working yet
+You can play against stockfish
