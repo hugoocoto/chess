@@ -13,7 +13,7 @@ PIECES = {
 }
 
 global selected_cell
-selected_cell = (0, 0)
+selected_cell = (-1, 0)
 
 engine = chess.engine.SimpleEngine.popen_uci(r"./Stockfish/src/stockfish")
 chessboard = chess.Board()
@@ -38,23 +38,26 @@ def parse(m):
     return ord(x0) - ord("a"), \
         ord(y0) - ord("1"), \
         ord(x1) - ord("a"), \
-        ord(y1) - ord("1")
+        ord(y1) - ord("1"), p
 
 
 # all the moves should be valid
 def move(m):
-    y0, x0, y1, x1, *p = parse(m)
+    y0, x0, y1, x1, p = parse(m)
 
-    if abs(y0 - y1) > 1 and (board[x0][y0] in ('K', 'k')):
-        board[x0][y0+1], board[x1][y1+1] = board[x0][y1+1], 'none'
+    if board[x0][y0] in ('K', 'k'):  # 0-0
+        if y1 - y0 > 1:
+            board[x0][y0+1], board[x1][y1+1] = board[x0][y1+1], 'none'
+        if y0 - y1 > 1:
+            board[x0][y0-1], board[x1][y1-2] = board[x0][y1-2], 'none'
 
-    # if y0 != y1 and (board[x0][y0] in ('P', 'p')):
-    #     board[x0][y1] = 'none'  # en - passant
+    elif y0 != y1 and \
+            board[x0][y0] in ('P', 'p') and \
+            board[x1][y1] in (' ', 'none'):
+        board[x0][y1] = 'none'  # en - passant
 
-    if len(p) > 1:
-        print(p)
-        exit()
-        board[x0][y0] = p[0]  # promotion
+    if len(p) == 1:
+        board[x0][y0] = p[0].upper() if chessboard.turn else p[0]  # promotion
 
     board[x0][y0], board[x1][y1] = 'none', board[x0][y0]
 
@@ -81,7 +84,7 @@ def set_starting_position():
 
 
 def bot_move():
-    result = engine.play(chessboard, chess.engine.Limit(time=0.1))
+    result = engine.play(chessboard, chess.engine.Limit(time=0.01))
     chessboard.push(result.move)
     move(result.move.uci())
 
@@ -149,6 +152,7 @@ def user_move_raw(stdscr):
 
 
 def main(stdscr):
+    global chessboard
     curses.mousemask(curses.ALL_MOUSE_EVENTS)
     curses.curs_set(0)
     curses.start_color()
@@ -196,9 +200,11 @@ def main(stdscr):
             case chess.Termination.VARIANT_LOSS: stdscr.addstr(" by variant loss")
             case chess.Termination.VARIANT_DRAW: stdscr.addstr(" by variant draw")
             case _: stdscr.addstr(f" by {out.termination}")
-    engine.quit()
     stdscr.getstr()
+    chessboard = chess.Board()
 
 
 if __name__ == '__main__':
-    curses.wrapper(main)
+    while True:
+        curses.wrapper(main)
+    engine.quit()
