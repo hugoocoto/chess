@@ -24,7 +24,7 @@ board: list[list[str]] = [['none' for _ in range(8)] for _ in range(8)]
 def print_board_white(stdscr):
     for i in range(8):
         for j in range(8):
-            stdscr.addstr(i, j*3, f" {PIECES[board[i][j]]} ",
+            stdscr.addstr(7-i, j*3, f" {PIECES[board[i][j]]} ",
                           curses.color_pair(1 +
                                             board[i][j].islower()*2 +
                                             (i+j) % 2 +
@@ -48,8 +48,13 @@ def move(m):
     if abs(y0 - y1) > 1 and (board[x0][y0] in ('K', 'k')):
         board[x0][y0+1], board[x1][y1+1] = board[x0][y1+1], 'none'
 
-    # todo:handle en-passant
-    # todo:handle promotion
+    # if y0 != y1 and (board[x0][y0] in ('P', 'p')):
+    #     board[x0][y1] = 'none'  # en - passant
+
+    if len(p) > 1:
+        print(p)
+        exit()
+        board[x0][y0] = p[0]  # promotion
 
     board[x0][y0], board[x1][y1] = 'none', board[x0][y0]
 
@@ -76,7 +81,7 @@ def set_starting_position():
 
 
 def bot_move():
-    result = engine.play(chessboard, chess.engine.Limit(time=1))
+    result = engine.play(chessboard, chess.engine.Limit(time=0.1))
     chessboard.push(result.move)
     move(result.move.uci())
 
@@ -147,6 +152,7 @@ def main(stdscr):
     curses.mousemask(curses.ALL_MOUSE_EVENTS)
     curses.curs_set(0)
     curses.start_color()
+    curses.use_default_colors()
     curses.init_pair(1, curses.COLOR_BLACK, curses.COLOR_BLUE)
     curses.init_pair(2, curses.COLOR_BLACK, curses.COLOR_WHITE)
     curses.init_pair(3, curses.COLOR_RED, curses.COLOR_BLUE)
@@ -159,13 +165,39 @@ def main(stdscr):
 
     set_starting_position()
     print_board_white(stdscr)
-    while not chessboard.is_game_over():
-        bot_move()
-        print_board_white(stdscr)
-        user_move_raw(stdscr)
+
+    while not (out := chessboard.outcome()):
+        if chessboard.turn == chess.WHITE:
+            bot_move()
+        else:
+            # user_move_raw(stdscr)
+            bot_move()
+
         print_board_white(stdscr)
 
+    else:
+        match out.winner:
+            case chess.WHITE:
+                stdscr.addstr(8, 0, "White win")
+            case chess.BLACK:
+                stdscr.addstr(8, 0, "Black win")
+            case _:
+                stdscr.addstr(8, 0, "Draw")
+
+        match out.termination:
+            case chess.Termination.CHECKMATE: stdscr.addstr(" by checkmate")
+            case chess.Termination.STALEMATE: stdscr.addstr(" by stalemate")
+            case chess.Termination.INSUFFICIENT_MATERIAL: stdscr.addstr(" by insufficient material")
+            case chess.Termination.SEVENTYFIVE_MOVES: stdscr.addstr(" by seventyfive moves")
+            case chess.Termination.FIVEFOLD_REPETITION: stdscr.addstr(" by fivefold repetition")
+            case chess.Termination.FIFTY_MOVES: stdscr.addstr(" by fifty moves")
+            case chess.Termination.THREEFOLD_REPETITION: stdscr.addstr(" by threefold repetition")
+            case chess.Termination.VARIANT_WIN: stdscr.addstr(" by variant win")
+            case chess.Termination.VARIANT_LOSS: stdscr.addstr(" by variant loss")
+            case chess.Termination.VARIANT_DRAW: stdscr.addstr(" by variant draw")
+            case _: stdscr.addstr(f" by {out.termination}")
     engine.quit()
+    stdscr.getstr()
 
 
 if __name__ == '__main__':
