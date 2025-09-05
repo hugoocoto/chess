@@ -9,16 +9,29 @@ PIECES = {
     'B': str("󰡜"),    'b': str("󰡜"),
     'R': str("󰡛"),    'r': str("󰡛"),
     'P': str("󰡙"),    'p': str("󰡙"),
-    'none': str(" "),
+    ' ': str(" "),
 }
+
+termination = ['' for _ in range(12)]
+termination[chess.Termination.CHECKMATE.value] = " by checkmate"
+termination[chess.Termination.STALEMATE.value] = " by stalemate"
+termination[chess.Termination.INSUFFICIENT_MATERIAL.value] = " by insufficient material"
+termination[chess.Termination.SEVENTYFIVE_MOVES.value] = " by seventyfive moves"
+termination[chess.Termination.FIVEFOLD_REPETITION.value] = " by fivefold repetition"
+termination[chess.Termination.FIFTY_MOVES.value] = " by fifty moves"
+termination[chess.Termination.THREEFOLD_REPETITION.value] = " by threefold repetition"
+termination[chess.Termination.VARIANT_WIN.value] = " by variant win"
+termination[chess.Termination.VARIANT_LOSS.value] = " by variant loss"
+termination[chess.Termination.VARIANT_DRAW.value] = " by variant draw"
 
 global selected_cell
 selected_cell = (-1, 0)
 
 engine = chess.engine.SimpleEngine.popen_uci(r"./Stockfish/src/stockfish")
+engine.configure({"UCI_LimitStrength": True, "UCI_Elo": 1320})
 chessboard = chess.Board()
 
-board: list[list[str]] = [['none' for _ in range(8)] for _ in range(8)]
+board: list[list[str]] = [[' ' for _ in range(8)] for _ in range(8)]
 
 
 def print_board_white(stdscr):
@@ -28,7 +41,9 @@ def print_board_white(stdscr):
                           curses.color_pair(1 +
                                             board[i][j].islower()*2 +
                                             (i+j) % 2 +
-                                            4*((i, j) == selected_cell)))
+                                            4*((i, j) == selected_cell))
+                          | curses.A_REVERSE
+                          | curses.A_BOLD)
 
     stdscr.refresh()
 
@@ -47,19 +62,19 @@ def move(m):
 
     if board[x0][y0] in ('K', 'k'):  # 0-0
         if y1 - y0 > 1:
-            board[x0][y0+1], board[x1][y1+1] = board[x0][y1+1], 'none'
+            board[x0][y0+1], board[x1][y1+1] = board[x0][y1+1], ' '
         if y0 - y1 > 1:
-            board[x0][y0-1], board[x1][y1-2] = board[x0][y1-2], 'none'
+            board[x0][y0-1], board[x1][y1-2] = board[x0][y1-2], ' '
 
     elif y0 != y1 and \
             board[x0][y0] in ('P', 'p') and \
-            board[x1][y1] in (' ', 'none'):
-        board[x0][y1] = 'none'  # en - passant
+            board[x1][y1] == ' ':
+        board[x0][y1] = ' '  # en - passant
 
     if len(p) == 1:
         board[x0][y0] = p[0].upper() if chessboard.turn else p[0]  # promotion
 
-    board[x0][y0], board[x1][y1] = 'none', board[x0][y0]
+    board[x0][y0], board[x1][y1] = ' ', board[x0][y0]
 
 
 def set_board_from_fen(fen):
@@ -74,7 +89,7 @@ def set_board_from_fen(fen):
             y += 1
         elif f.isdigit():
             for i in range(int(f)):
-                board[x][y] = 'none'
+                board[x][y] = ' '
                 y += 1
     # todo: use the last part of the fen
 
@@ -83,8 +98,8 @@ def set_starting_position():
     set_board_from_fen(chess.STARTING_BOARD_FEN)
 
 
-def bot_move():
-    result = engine.play(chessboard, chess.engine.Limit(time=0.01))
+def bot_move(t=0.01):
+    result = engine.play(chessboard, chess.engine.Limit(time=t))
     chessboard.push(result.move)
     move(result.move.uci())
 
@@ -111,18 +126,28 @@ def get_select_cell(stdscr):
     while (1):
         stdscr.keypad(True)
         ch = stdscr.getch()
-        if (ch in (curses.KEY_LEFT, ord("h"))):
+        if ch == curses.KEY_MOUSE:
+            id, my, mx, z, bstate = curses.getmouse()
+            x = 7-mx
+            y = my//3
+            selected_cell = (x, y)
+            print_board_white(stdscr)
+            if bstate & curses.BUTTON1_RELEASED | curses.BUTTON1_PRESSED:
+                if my//3 >= 0 and my//3 <= 7 and mx >= 0 and mx <= 7:
+                    return selected_cell
+
+        elif (ch in (curses.KEY_LEFT, ord("h"))):
             if y > 0:
                 y -= 1
         elif (ch in (curses.KEY_RIGHT, ord("l"))):
             if y < 7:
                 y += 1
         elif (ch in (curses.KEY_DOWN, ord("j"))):
-            if x < 7:
-                x += 1
-        elif (ch in (curses.KEY_UP, ord("k"))):
             if x > 0:
                 x -= 1
+        elif (ch in (curses.KEY_UP, ord("k"))):
+            if x < 7:
+                x += 1
         elif (ch in (curses.KEY_ENTER, 10, ord("\t"))):
             break
         else:
@@ -133,6 +158,11 @@ def get_select_cell(stdscr):
 
 
 def user_move_raw(stdscr):
+    global selected_cell
+    if selected_cell == (-1, -1):
+        selected_cell = (4, 2)
+        print_board_white(stdscr)
+
     x0, y0 = get_select_cell(stdscr)
     x1, y1 = get_select_cell(stdscr)
     uci = chr(y0+ord("a")) +\
@@ -151,60 +181,54 @@ def user_move_raw(stdscr):
     move(uci)
 
 
+def play(stdscr):
+    global chessboard
+    chessboard = chess.Board()
+    set_starting_position()
+    print_board_white(stdscr)
+
+    while not (out := chessboard.outcome()):
+        if chessboard.turn == chess.WHITE:
+            user_move_raw(stdscr)
+
+        else:
+            bot_move()
+
+        print_board_white(stdscr)
+
+    stdscr.move(8, 0)
+    match out.winner:
+        case chess.WHITE: stdscr.addstr("White win")
+        case chess.BLACK: stdscr.addstr("Black win")
+        case _:           stdscr.addstr("Draw")
+
+    stdscr.addstr(termination[out.termination.value])
+    stdscr.refresh()
+    stdscr.getstr()
+    stdscr.move(8, 0)
+    stdscr.clrtoeol()
+
+
 def main(stdscr):
     global chessboard
     curses.mousemask(curses.ALL_MOUSE_EVENTS)
     curses.curs_set(0)
     curses.start_color()
     curses.use_default_colors()
-    curses.init_pair(1, curses.COLOR_BLACK, curses.COLOR_BLUE)
-    curses.init_pair(2, curses.COLOR_BLACK, curses.COLOR_WHITE)
-    curses.init_pair(3, curses.COLOR_RED, curses.COLOR_BLUE)
-    curses.init_pair(4, curses.COLOR_RED, curses.COLOR_WHITE)
-    curses.init_pair(5, curses.COLOR_BLACK, curses.COLOR_GREEN)
-    curses.init_pair(6, curses.COLOR_BLACK, curses.COLOR_GREEN)
-    curses.init_pair(7, curses.COLOR_RED, curses.COLOR_GREEN)
-    curses.init_pair(8, curses.COLOR_RED, curses.COLOR_GREEN)
-    curses.init_pair(9, curses.COLOR_WHITE, curses.COLOR_BLACK)
+    curses.init_pair(1, curses.COLOR_BLUE, -1)
+    curses.init_pair(2, curses.COLOR_WHITE, -1)
+    curses.init_pair(3, curses.COLOR_BLUE, curses.COLOR_RED)
+    curses.init_pair(4, curses.COLOR_WHITE, curses.COLOR_RED)
+    curses.init_pair(5, curses.COLOR_GREEN, -1)
+    curses.init_pair(6, curses.COLOR_GREEN, -1)
+    curses.init_pair(7, curses.COLOR_GREEN, curses.COLOR_RED)
+    curses.init_pair(8, curses.COLOR_GREEN, curses.COLOR_RED)
+    curses.init_pair(9, curses.COLOR_BLACK, curses.COLOR_WHITE)
 
-    set_starting_position()
-    print_board_white(stdscr)
-
-    while not (out := chessboard.outcome()):
-        if chessboard.turn == chess.WHITE:
-            bot_move()
-        else:
-            # user_move_raw(stdscr)
-            bot_move()
-
-        print_board_white(stdscr)
-
-    else:
-        match out.winner:
-            case chess.WHITE:
-                stdscr.addstr(8, 0, "White win")
-            case chess.BLACK:
-                stdscr.addstr(8, 0, "Black win")
-            case _:
-                stdscr.addstr(8, 0, "Draw")
-
-        match out.termination:
-            case chess.Termination.CHECKMATE: stdscr.addstr(" by checkmate")
-            case chess.Termination.STALEMATE: stdscr.addstr(" by stalemate")
-            case chess.Termination.INSUFFICIENT_MATERIAL: stdscr.addstr(" by insufficient material")
-            case chess.Termination.SEVENTYFIVE_MOVES: stdscr.addstr(" by seventyfive moves")
-            case chess.Termination.FIVEFOLD_REPETITION: stdscr.addstr(" by fivefold repetition")
-            case chess.Termination.FIFTY_MOVES: stdscr.addstr(" by fifty moves")
-            case chess.Termination.THREEFOLD_REPETITION: stdscr.addstr(" by threefold repetition")
-            case chess.Termination.VARIANT_WIN: stdscr.addstr(" by variant win")
-            case chess.Termination.VARIANT_LOSS: stdscr.addstr(" by variant loss")
-            case chess.Termination.VARIANT_DRAW: stdscr.addstr(" by variant draw")
-            case _: stdscr.addstr(f" by {out.termination}")
-    stdscr.getstr()
-    chessboard = chess.Board()
+    while (True):
+        play(stdscr)
+    engine.quit()
 
 
 if __name__ == '__main__':
-    while True:
-        curses.wrapper(main)
-    engine.quit()
+    curses.wrapper(main)
