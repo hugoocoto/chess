@@ -132,7 +132,7 @@ def get_select_cell(stdscr):
             y = my//3
             selected_cell = (x, y)
             print_board_white(stdscr)
-            if bstate & curses.BUTTON1_RELEASED | curses.BUTTON1_PRESSED:
+            if bstate & (curses.BUTTON1_RELEASED | curses.BUTTON1_PRESSED):
                 if my//3 >= 0 and my//3 <= 7 and mx >= 0 and mx <= 7:
                     return selected_cell
 
@@ -204,7 +204,7 @@ def play(stdscr):
 
     stdscr.addstr(termination[out.termination.value])
     stdscr.refresh()
-    stdscr.getstr()
+    stdscr.getch()
     stdscr.move(8, 0)
     stdscr.clrtoeol()
 
