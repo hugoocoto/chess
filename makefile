@@ -1,4 +1,4 @@
-run: env Stockfish Stockfish/src/stockfish
+run: env Stockfish/src/stockfish
 	./bin/python3 main.py
 
 Stockfish:
@@ -12,3 +12,5 @@ env:
 	[ -d "bin" ] || python -m venv .
 	[ -d "./lib/python3.13/site-packages/chess" ] || pip install python-chess
 
+install: env Stockfish/src/stockfish
+	pyinstaller --onefile --distpath . main.py
