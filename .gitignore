@@ -7,4 +7,5 @@ lib64
 Stockfish
 pyvenv.cfg
 __pycache__
-
+chess
+chess.spec
