@@ -13,4 +13,4 @@ env:
 	[ -d "./lib/python3.13/site-packages/chess" ] || pip install python-chess
 
 install: env Stockfish/src/stockfish
-	pyinstaller --onefile --distpath . main.py
+	pyinstaller --onefile --distpath . main.py -n chess

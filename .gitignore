@@ -1,7 +1,9 @@
 bin
+build
 include
 lib
 lib64
 Stockfish
 pyvenv.cfg
 __pycache__
+
