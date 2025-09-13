@@ -1,6 +1,8 @@
 import curses
 import chess
 import chess.engine
+import os
+import sys
 
 PIECES = {
     'Q': str("󰡚"),    'q': str("󰡚"),
@@ -27,7 +29,15 @@ termination[chess.Termination.VARIANT_DRAW.value] = " by variant draw"
 global selected_cell
 selected_cell = (-1, 0)
 
-engine = chess.engine.SimpleEngine.popen_uci(r"./Stockfish/src/stockfish")
+if getattr(sys, 'frozen', False):
+    # Ejecutable PyInstaller
+    base_path = sys._MEIPASS
+else:
+    base_path = os.path.abspath(".")
+
+engine_path = os.path.join(base_path, "Stockfish/src/stockfish")
+engine = chess.engine.SimpleEngine.popen_uci(engine_path)
+
 engine.configure({"UCI_LimitStrength": True, "UCI_Elo": 1320})
 chessboard = chess.Board()
 
@@ -98,7 +108,7 @@ def set_starting_position():
     set_board_from_fen(chess.STARTING_BOARD_FEN)
 
 
-def bot_move(t=0.01):
+def bot_move(t=1.0):
     result = engine.play(chessboard, chess.engine.Limit(time=t))
     chessboard.push(result.move)
     move(result.move.uci())
